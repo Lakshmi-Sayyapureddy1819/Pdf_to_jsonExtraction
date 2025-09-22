@@ -51,6 +51,19 @@ def analyze_pdf_with_gemini(api_key, pdf_bytes, prompt: str) -> str:
 
     return response.text
 
+def repair_json_string(s: str) -> str:
+    """Try to fix truncated JSON by balancing braces/brackets."""
+    open_curly = s.count("{")
+    close_curly = s.count("}")
+    open_square = s.count("[")
+    close_square = s.count("]")
+
+    # Balance missing braces/brackets
+    s += "}" * (open_curly - close_curly)
+    s += "]" * (open_square - close_square)
+
+    return s
+
 
 # ---- Streamlit UI ----
 st.title("📄 PDF Structure Extraction with Gemini API")
