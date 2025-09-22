@@ -118,27 +118,45 @@ prompt = st.text_area(
     )
 )
 
+# if uploaded_file:
+#     with st.spinner("Uploading and analyzing PDF..."):
+#         pdf_bytes = uploaded_file.read()
+#         try:
+#             result_text = analyze_pdf_with_gemini(API_KEY, pdf_bytes, prompt)
+#             # cleaned_json = clean_json_response(result_text)
+#             # cleaned_json = repair_json_string(cleaned_json)
+
+#             try:
+#                 # parsed = json.loads(cleaned_json)
+#                 parsed = safe_parse_json(result_text)
+#                 st.success("✅ Extraction complete (strict JSON)!")
+#                 st.json(parsed)
+
+#             except json.JSONDecodeError:
+#                 try:
+#                     parsed = json5.loads(cleaned_json)
+#                     st.warning("⚠️ Extracted using relaxed JSON5 parsing.")
+#                     st.json(parsed)
+#                 except Exception as e:
+#                     st.error(f"⚠️ Still invalid JSON: {e}")
+#                     st.text_area("Raw Gemini Output", result_text, height=400)
+#         except Exception as e:
+#             st.error(f"❌ Error: {str(e)}")
 if uploaded_file:
     with st.spinner("Uploading and analyzing PDF..."):
         pdf_bytes = uploaded_file.read()
         try:
             result_text = analyze_pdf_with_gemini(API_KEY, pdf_bytes, prompt)
-            # cleaned_json = clean_json_response(result_text)
-            # cleaned_json = repair_json_string(cleaned_json)
 
             try:
-                # parsed = json.loads(cleaned_json)
+                # Use the safer parser directly
                 parsed = safe_parse_json(result_text)
-                st.success("✅ Extraction complete (strict JSON)!")
+                st.success("✅ Extraction complete!")
                 st.json(parsed)
 
-            except json.JSONDecodeError:
-                try:
-                    parsed = json5.loads(cleaned_json)
-                    st.warning("⚠️ Extracted using relaxed JSON5 parsing.")
-                    st.json(parsed)
-                except Exception as e:
-                    st.error(f"⚠️ Still invalid JSON: {e}")
-                    st.text_area("Raw Gemini Output", result_text, height=400)
+            except Exception as e:
+                st.error(f"⚠️ Still invalid JSON after repair: {e}")
+                st.text_area("Raw Gemini Output", result_text, height=400)
+
         except Exception as e:
             st.error(f"❌ Error: {str(e)}")
