@@ -3,7 +3,7 @@ import os
 import tempfile
 import re
 import json
-import json5   # install via `pip install json5`
+import json5   # pip install json5
 from dotenv import load_dotenv
 from google import genai
 
@@ -28,48 +28,22 @@ def clean_json_response(text: str) -> str:
     return cleaned.strip()
 
 
-# ---- Function: Analyze PDF with Gemini ----
-def analyze_pdf_with_gemini(api_key, pdf_bytes, prompt: str) -> str:
-    client = genai.Client(api_key=api_key)
+def extract_json_block(text: str) -> str:
+    """Extract the largest JSON-like block from text."""
+    match = re.search(r"\{.*\}", text, re.DOTALL)
+    if match:
+        return match.group(0)
+    return text
 
-    # Save PDF temporarily
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
-        tmp_file.write(pdf_bytes)
-        tmp_file_path = tmp_file.name
-
-    # Upload to Gemini
-    uploaded = client.files.upload(
-        file=tmp_file_path,
-        config=dict(mime_type="application/pdf")
-    )
-
-    # Ask Gemini
-    response = client.models.generate_content(
-        model="gemini-1.5-pro",
-        contents=[uploaded, prompt]
-    )
-
-    return response.text
-
-def repair_json_string(s: str) -> str:
-    """Try to fix truncated JSON by balancing braces/brackets."""
-    open_curly = s.count("{")
-    close_curly = s.count("}")
-    open_square = s.count("[")
-    close_square = s.count("]")
-
-    # Balance missing braces/brackets
-    s += "}" * (open_curly - close_curly)
-    s += "]" * (open_square - close_square)
-
-    return s
 
 def safe_parse_json(text: str):
     """
     Try to parse Gemini output into JSON.
     Cleans up common issues like extra braces, dangling commas, unquoted keys.
     """
-    cleaned = clean_json_response(text)
+    # First isolate possible JSON block
+    cleaned = extract_json_block(text)
+    cleaned = clean_json_response(cleaned)
 
     # Fix double closing braces like "}}"
     cleaned = re.sub(r"\}\s*\}", "}", cleaned)
@@ -104,6 +78,30 @@ def safe_parse_json(text: str):
     raise ValueError("Could not repair JSON")
 
 
+# ---- Function: Analyze PDF with Gemini ----
+def analyze_pdf_with_gemini(api_key, pdf_bytes, prompt: str) -> str:
+    client = genai.Client(api_key=api_key)
+
+    # Save PDF temporarily
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
+        tmp_file.write(pdf_bytes)
+        tmp_file_path = tmp_file.name
+
+    # Upload to Gemini
+    uploaded = client.files.upload(
+        file=tmp_file_path,
+        config=dict(mime_type="application/pdf")
+    )
+
+    # Ask Gemini
+    response = client.models.generate_content(
+        model="gemini-1.5-pro",
+        contents=[uploaded, prompt]
+    )
+
+    return response.text
+
+
 # ---- Streamlit UI ----
 st.title("📄 PDF Structure Extraction with Gemini API")
 
@@ -112,36 +110,14 @@ uploaded_file = st.file_uploader("Upload your PDF file", type="pdf")
 prompt = st.text_area(
     "Custom extraction prompt (or use default):",
     value=(
-        "Extract the PDF as structured JSON with pages, sections, sub-sections, "
-        "paragraphs, tables, and charts. Output ONLY valid JSON. "
-        "Do not include markdown or code fences."
+        "You are a JSON API. Extract the PDF into structured JSON with keys: "
+        "pages, sections, sub_sections, paragraphs, tables, charts. "
+        "Respond with ONLY valid JSON. "
+        "Do not include explanations, markdown, or code fences. "
+        "Start with '{' and end with '}'."
     )
 )
 
-# if uploaded_file:
-#     with st.spinner("Uploading and analyzing PDF..."):
-#         pdf_bytes = uploaded_file.read()
-#         try:
-#             result_text = analyze_pdf_with_gemini(API_KEY, pdf_bytes, prompt)
-#             # cleaned_json = clean_json_response(result_text)
-#             # cleaned_json = repair_json_string(cleaned_json)
-
-#             try:
-#                 # parsed = json.loads(cleaned_json)
-#                 parsed = safe_parse_json(result_text)
-#                 st.success("✅ Extraction complete (strict JSON)!")
-#                 st.json(parsed)
-
-#             except json.JSONDecodeError:
-#                 try:
-#                     parsed = json5.loads(cleaned_json)
-#                     st.warning("⚠️ Extracted using relaxed JSON5 parsing.")
-#                     st.json(parsed)
-#                 except Exception as e:
-#                     st.error(f"⚠️ Still invalid JSON: {e}")
-#                     st.text_area("Raw Gemini Output", result_text, height=400)
-#         except Exception as e:
-#             st.error(f"❌ Error: {str(e)}")
 if uploaded_file:
     with st.spinner("Uploading and analyzing PDF..."):
         pdf_bytes = uploaded_file.read()
@@ -149,7 +125,6 @@ if uploaded_file:
             result_text = analyze_pdf_with_gemini(API_KEY, pdf_bytes, prompt)
 
             try:
-                # Use the safer parser directly
                 parsed = safe_parse_json(result_text)
                 st.success("✅ Extraction complete!")
                 st.json(parsed)
