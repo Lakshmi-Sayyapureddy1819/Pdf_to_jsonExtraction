@@ -64,6 +64,45 @@ def repair_json_string(s: str) -> str:
 
     return s
 
+def safe_parse_json(text: str):
+    """
+    Try to parse Gemini output into JSON.
+    Cleans up common issues like extra braces, dangling commas, unquoted keys.
+    """
+    cleaned = clean_json_response(text)
+
+    # Fix double closing braces like "}}"
+    cleaned = re.sub(r"\}\s*\}", "}", cleaned)
+
+    # Fix trailing commas again
+    cleaned = re.sub(r",\s*([}\]])", r"\1", cleaned)
+
+    # Remove unexpected characters before first '{'
+    if "{" in cleaned:
+        cleaned = cleaned[cleaned.index("{"):]
+
+    # Try JSON strict first
+    try:
+        return json.loads(cleaned)
+    except Exception:
+        pass
+
+    # Try JSON5 (lenient)
+    try:
+        return json5.loads(cleaned)
+    except Exception:
+        pass
+
+    # Last resort: truncate until last complete brace
+    last_curly = cleaned.rfind("}")
+    if last_curly != -1:
+        try:
+            return json.loads(cleaned[: last_curly + 1])
+        except Exception:
+            pass
+
+    raise ValueError("Could not repair JSON")
+
 
 # ---- Streamlit UI ----
 st.title("📄 PDF Structure Extraction with Gemini API")
@@ -84,11 +123,12 @@ if uploaded_file:
         pdf_bytes = uploaded_file.read()
         try:
             result_text = analyze_pdf_with_gemini(API_KEY, pdf_bytes, prompt)
-            cleaned_json = clean_json_response(result_text)
-            cleaned_json = repair_json_string(cleaned_json)
+            # cleaned_json = clean_json_response(result_text)
+            # cleaned_json = repair_json_string(cleaned_json)
 
             try:
-                parsed = json.loads(cleaned_json)
+                # parsed = json.loads(cleaned_json)
+                parsed = safe_parse_json(result_text)
                 st.success("✅ Extraction complete (strict JSON)!")
                 st.json(parsed)
 
